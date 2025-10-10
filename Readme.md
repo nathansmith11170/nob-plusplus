@@ -8,6 +8,7 @@ In the same vein, nob++ only requires a C++ compiler which supports C++20 module
 - Build a simple executable with a module import (std module, user module) <-- In Progress
 - Build a simple library with modules
 - Configurable compile and link flags
+- support `#include` if header is available in compiler's search paths
 - Incremental builds
 - Parallel builds
 - Watch mode to rebuild on source change
