@@ -1,0 +1,23 @@
+# We don't want to ignore the following even if they are dot-files
+#
+!.clang-format
+!.clippy.toml
+!.cocciconfig
+!.editorconfig
+!.get_maintainer.ignore
+!.gitattributes
+!.gitignore
+!.kunitconfig
+!.mailmap
+!.pylintrc
+!.rustfmt.toml
+
+# Clang's compilation database file
+/compile_commands.json
+
+# Documentation toolchain
+sphinx_*/
+
+build*
+gcm.cache
+.cache
