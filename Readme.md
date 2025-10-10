@@ -13,5 +13,5 @@ So we'll see how far we can get with a build system that doesn't require the fil
 
 # Assumptions
 
-For now, there has to be only one program entry point somewhere under the working directory. (in the future, building a library will be supported)
-Only system headers are allowed to be used with `#include`
+- For now, there has to be only one program entry point somewhere under the working directory. (in the future, building a library will be supported)
+- Only system headers are allowed to be used with `#include`
