@@ -21,3 +21,8 @@ sphinx_*/
 build*
 gcm.cache
 .cache
+
+
+nob++*
+!nob++.mxx
+!nob++.cxx

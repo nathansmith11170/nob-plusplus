@@ -15,3 +15,12 @@ So we'll see how far we can get with a build system that doesn't require the fil
 
 - For now, there has to be only one program entry point somewhere under the working directory. (in the future, building a library will be supported)
 - Only system headers are allowed to be used with `#include`
+
+# Bootstrapping
+
+As it stands the std module has to be pre-compiled before use. The bootstrap scripts attempt to do this for sane default installations, but you might have to adjust the location of your compiler's module interface unit. The steps to bootstrap nob++ are:
+- Copy the three files nob++.cxx, nob++.mxx, and the bootstrap you prefer to your project
+- Obtain a compiler version that works (tested with GCC15, Clang 20 & 21)
+- Update your std module path if necessary in the bootstrap script you prefer
+- execute the bootstrap script
+- execute nob++
