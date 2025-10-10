@@ -3,6 +3,16 @@
 This is heavily inspired by https://github.com/tsoding/nob.h, a minimal build system for C which can be used with nothing but a C compiler.
 In the same vein, nob++ only requires a C++ compiler which supports C++20 modules and C++23 `import std`
 
+# Features
+
+- Build a simple executable with a module import (std module, user module) <-- In Progress
+- Build a simple library with modules
+- Configurable compile and link flags
+- Incremental builds
+- Parallel builds
+- Watch mode to rebuild on source change
+- Mutli-target project support (i.e. an exe which hot-loads a dynamic lib) 
+
 # Idea
 
 My idea expands on the original idea of nob.h by saying - who needs to manually specify all these source files anyway? With the introduction of the module paradigm, C++ can build itself from the program entry point.
