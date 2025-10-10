@@ -12,7 +12,11 @@ In the same vein, nob++ only requires a C++ compiler which supports C++20 module
 - Incremental builds
 - Parallel builds
 - Watch mode to rebuild on source change
-- Mutli-target project support (i.e. an exe which hot-loads a dynamic lib) 
+- Mutli-target project support (i.e. an exe which hot-loads a dynamic lib)
+
+## NOT expected to be supported
+
+Literally any significant preprocessor use other than system header `#include`, conditional compilation nightmares and such are really not something I want to deal with.
 
 # Idea
 
