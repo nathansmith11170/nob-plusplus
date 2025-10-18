@@ -1,7 +1,11 @@
-import std;
 import nob;
 
 int main(int argc, char* argv[])
 {
-	std::println(std::cout, "Hello, {}", nob::theAnswer());
+	auto [err, result] = nob::initBuilder()
+		.useDefaultArgumentHandling()
+		.detectCompiler()
+		.useBuildExecutor(nob::ExecutorType::System)
+		.setWarningLevel(nob::WarningLevel::Strict)
+		.build("exercises/hello/hello.cxx");
 }
