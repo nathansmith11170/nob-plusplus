@@ -1,7 +1,7 @@
 # nob++ - nob.h for modern C++
 
 This is heavily inspired by https://github.com/tsoding/nob.h, a minimal build system for C which can be used with nothing but a C compiler.
-In the same vein, nob++ only requires a C++ compiler which supports C++20 modules and C++23 `import std`
+In the same vein, nob++ only requires a C++ compiler which supports C++20 modules and a standard library which can be compiled as a module for `import std`
 
 # Idea
 
