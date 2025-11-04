@@ -77,7 +77,8 @@ class BuildCommandGenerator
 public:
 	// This is the common interface for all strategies
 	virtual std::vector<std::string>
-	generateCommands(const std::string& entry_point, Compiler compiler,
+	generateCommands(const std::string& entry_point,
+									 const std::string& output_dir, Compiler compiler,
 									 Platform os, WarningLevel warning_level,
 									 OptimizationLevel optimization_level) const = 0;
 
@@ -88,33 +89,38 @@ class SystemCommandGenerator : public BuildCommandGenerator
 {
 public:
 	std::vector<std::string>
-	generateCommands(const std::string& entry_point, Compiler compiler,
+	generateCommands(const std::string& entry_point,
+									 const std::string& output_dir, Compiler compiler,
 									 Platform os, WarningLevel warning_level,
 									 OptimizationLevel optimization_level) const override
 	{
 		std::vector<std::string> commands;
 		std::string executable_extension = (os == Platform::Windows) ? ".exe" : "";
+		std::filesystem::path out_file =
+				std::filesystem::path(entry_point).filename();
+		std::filesystem::path output = output_dir / out_file;
+		output.replace_extension(executable_extension);
 
 		if (compiler == Compiler::MSVC)
 		{
 			std::string optimization_flag;
-			if (optimization_level = OptimizationLevel::None)
+			if (optimization_level == OptimizationLevel::None)
 			{
 				optimization_flag = "/Od";
 			}
-			else if (optimization_level = OptimizationLevel::DebugFriendly)
+			else if (optimization_level == OptimizationLevel::DebugFriendly)
 			{
 				optimization_flag = "/Od";
 			}
-			else if (optimization_level = OptimizationLevel::Size)
+			else if (optimization_level == OptimizationLevel::Size)
 			{
 				optimization_flag = "/O1";
 			}
-			else if (optimization_level = OptimizationLevel::Speed)
+			else if (optimization_level == OptimizationLevel::Speed)
 			{
-				optimization_flag = "/O2"
+				optimization_flag = "/O2";
 			}
-			else if (optimization_level = OptimizationLevel::Aggressive)
+			else if (optimization_level == OptimizationLevel::Aggressive)
 			{
 				optimization_flag = "/O2";
 			}
@@ -123,33 +129,53 @@ public:
 				optimization_flag = "";
 			}
 
-			std::string common_flags = "/std:c++latest /EHsc /nologo /Fe:out";
+			std::string warning_flags;
+			if (warning_level == WarningLevel::None)
+			{
+				warning_flags = "/w";
+			}
+			else if (warning_level == WarningLevel::Strict)
+			{
+				warning_flags = "/W3";
+			}
+			else if (warning_level == WarningLevel::Maximal)
+			{
+				warning_flags = "/W4";
+			}
+			else
+			{
+				warning_flags = "";
+			}
 
-			commands.push_back(command_exec + common_flags + " " + optimization_flag + " /c" + "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.44.35207\\modules\\std.ixx";
+			std::string common_flags = "/std:c++latest /EHsc /nologo";
 
-			commands.push_back(command_exec + " " +
-								optimization_flag + target_ext + " " + entry_point + " std.obj");
+			commands.push_back(std::format("cl.exe {} {} {} /c std.ixx" warning_flags,
+																		 common_flags, optimization_flag));
+
+			commands.push_back(std::format(
+					"cl.exe {} {} {} /Fe:\"{}\" \"{}\" std.obj", warning_flags,
+					common_flags, optimization_flag, output.string(), entry_point));
 		}
 		else if (compiler == Compiler::GCC)
 		{
 			std::string optimization_flag;
-			if (optimization_level = OptimizationLevel::None)
+			if (optimization_level == OptimizationLevel::None)
 			{
 				optimization_flag = "-O0";
 			}
-			else if (optimization_level = OptimizationLevel::DebugFriendly)
+			else if (optimization_level == OptimizationLevel::DebugFriendly)
 			{
-				optimization_flag = "/Og";
+				optimization_flag = "-Og";
 			}
-			else if (optimization_level = OptimizationLevel::Size)
+			else if (optimization_level == OptimizationLevel::Size)
 			{
 				optimization_flag = "-Os";
 			}
-			else if (optimization_level = OptimizationLevel::Speed)
+			else if (optimization_level == OptimizationLevel::Speed)
 			{
-				optimization_flag = "-O2"
+				optimization_flag = "-O2";
 			}
-			else if (optimization_level = OptimizationLevel::Aggressive)
+			else if (optimization_level == OptimizationLevel::Aggressive)
 			{
 				optimization_flag = "-O3";
 			}
@@ -161,7 +187,7 @@ public:
 			std::string warning_flags;
 			if (warning_level == WarningLevel::None)
 			{
-				warning_flags = "-fsyntax-only";
+				warning_flags = "";
 			}
 			else if (warning_level == WarningLevel::Strict)
 			{
@@ -186,16 +212,16 @@ public:
 			std::string common_flags = "-std=c++23 -fmodules";
 
 			commands.push_back(
-					std::format("g++{} {} {} -fsearch-include-path bits/std.cc "
-											"-fmodule-only {} -c bits/std.cc",
+					std::format("g++{} {} {} {} -fsearch-include-path bits/std.cc "
+											"-fmodule-only -c bits/std.cc",
 											executable_extension, warning_flags, common_flags,
 											optimization_flag));
 
 			commands.push_back(std::format("g++{} {} {} {} "
 																		 "-o {} -x c++ {}",
 																		 executable_extension, warning_flags,
-																		 common_flags, optimization_flag, out_file,
-																		 entry_point));
+																		 common_flags, optimization_flag,
+																		 output.string(), entry_point));
 		}
 	}
 };
