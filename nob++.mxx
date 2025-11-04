@@ -2,23 +2,28 @@ export module nob;
 
 import std;
 
-namespace nob::detail
-{
-struct ConfigurationState;
-class ScriptBuilder;
-class GCCBuilder;
-class ClangBuilder;
-class MSVCBuilder;
-class BuildExecutor;
-class SystemExecutor;
-enum class CompilerKind : std::uint8_t;
-struct CompilerChoice;
-enum class ScriptFlavor : std::uint8_t;
-} // namespace nob::detail
-
 export namespace nob
 {
-enum class WarningLevel
+enum Platform
+{
+	Linux,
+	Windows,
+};
+
+enum Compiler
+{
+	GCC,
+	Clang,
+	MSVC,
+};
+
+enum ExecutionStrategy
+{
+	System,
+	Ninja, // TODO
+};
+
+enum WarningLevel
 {
 	None,
 	Default,
@@ -26,915 +31,271 @@ enum class WarningLevel
 	Maximal,
 };
 
-struct CommandError
+enum OptimizationLevel
 {
-	bool has_error{false};
-	std::string message{};
-	std::string detail{};
+	None,
+	CompilerDefault,
+	DebugFriendly,
+	Size,
+	Speed,
+	Aggressive,
+};
 
-	[[nodiscard]] explicit operator bool() const noexcept
+enum RuntimeError
+{
+	UnrecognizedHostOS,
+	NoCompilerFound,
+	NoPathEnvVar,
+};
+
+std::string getRuntimeErrorMessage(RuntimeError error)
+{
+	switch (error)
 	{
-		return has_error;
+	case RuntimeError::UnrecognizedHostOS:
+		return "The host operating system could not be reliably identified "
+					 "(checked for Windows and POSIX-like environments).";
+	case RuntimeError::NoCompilerFound:
+		return "No supported compiler (g++, clang, cl.exe) was found in the system "
+					 "PATH.";
+	case RuntimeError::NoPathEnvVar:
+		return "The system PATH environment variable is not set.";
+	default:
+		return "Unknown RuntimeError value encountered.";
+	}
+}
+
+struct BuildResult
+{
+};
+} // namespace nob
+
+namespace nob::detail
+{
+class BuildCommandGenerator
+{
+public:
+	// This is the common interface for all strategies
+	virtual std::vector<std::string>
+	generateCommands(const std::string& entry_point, Compiler compiler,
+									 Platform os, WarningLevel warning_level,
+									 OptimizationLevel optimization_level) const = 0;
+
+	virtual ~BuildCommandGenerator() = default;
+};
+
+class SystemCommandGenerator : public BuildCommandGenerator
+{
+public:
+	std::vector<std::string>
+	generateCommands(const std::string& entry_point, Compiler compiler,
+									 Platform os, WarningLevel warning_level,
+									 OptimizationLevel optimization_level) const override
+	{
+		std::vector<std::string> commands;
+		std::string executable_extension = (os == Platform::Windows) ? ".exe" : "";
+
+		if (compiler == Compiler::MSVC)
+		{
+			std::string optimization_flag;
+			if (optimization_level = OptimizationLevel::None)
+			{
+				optimization_flag = "/Od";
+			}
+			else if (optimization_level = OptimizationLevel::DebugFriendly)
+			{
+				optimization_flag = "/Od";
+			}
+			else if (optimization_level = OptimizationLevel::Size)
+			{
+				optimization_flag = "/O1";
+			}
+			else if (optimization_level = OptimizationLevel::Speed)
+			{
+				optimization_flag = "/O2"
+			}
+			else if (optimization_level = OptimizationLevel::Aggressive)
+			{
+				optimization_flag = "/O2";
+			}
+			else
+			{
+				optimization_flag = "";
+			}
+
+			std::string common_flags = "/std:c++latest /EHsc /nologo /Fe:out";
+
+			commands.push_back(command_exec + common_flags + " " + optimization_flag + " /c" + "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.44.35207\\modules\\std.ixx";
+
+			commands.push_back(command_exec + " " +
+								optimization_flag + target_ext + " " + entry_point + " std.obj");
+		}
+		else if (compiler == Compiler::GCC)
+		{
+			std::string optimization_flag;
+			if (optimization_level = OptimizationLevel::None)
+			{
+				optimization_flag = "-O0";
+			}
+			else if (optimization_level = OptimizationLevel::DebugFriendly)
+			{
+				optimization_flag = "/Og";
+			}
+			else if (optimization_level = OptimizationLevel::Size)
+			{
+				optimization_flag = "-Os";
+			}
+			else if (optimization_level = OptimizationLevel::Speed)
+			{
+				optimization_flag = "-O2"
+			}
+			else if (optimization_level = OptimizationLevel::Aggressive)
+			{
+				optimization_flag = "-O3";
+			}
+			else
+			{
+				optimization_flag = "";
+			}
+
+			std::string warning_flags;
+			if (warning_level == WarningLevel::None)
+			{
+				warning_flags = "-fsyntax-only";
+			}
+			else if (warning_level == WarningLevel::Strict)
+			{
+				warning_flags = "-Wall -Wextra -pedantic";
+			}
+			else if (warning_level == WarningLevel::Maximal)
+			{
+				warning_flags =
+						"-pedantic -Wall -Wextra -Wcast-align -Wcast-qual "
+						"-Wctor-dtor-privacy -Wdisabled-optimization -Wformat=2 "
+						"-Winit-self -Wlogical-op -Wmissing-declarations "
+						"-Wmissing-include-dirs -Wnoexcept -Wold-style-cast "
+						"-Woverloaded-virtual -Wredundant-decls -Wshadow -Wsign-conversion "
+						"-Wsign-promo -Wstrict-null-sentinel -Wstrict-overflow=5 "
+						"-Wswitch-default -Wundef -Werror -Wno-unused";
+			}
+			else
+			{
+				warning_flags = "";
+			}
+
+			std::string common_flags = "-std=c++23 -fmodules";
+
+			commands.push_back(
+					std::format("g++{} {} {} -fsearch-include-path bits/std.cc "
+											"-fmodule-only {} -c bits/std.cc",
+											executable_extension, warning_flags, common_flags,
+											optimization_flag));
+
+			commands.push_back(std::format("g++{} {} {} {} "
+																		 "-o {} -x c++ {}",
+																		 executable_extension, warning_flags,
+																		 common_flags, optimization_flag, out_file,
+																		 entry_point));
+		}
 	}
 };
+} // namespace nob::detail
 
-struct CommandResult
+export namespace nob
 {
-	int exit_code{0};
-	std::string output{};
-	std::string script{};
-};
-
-enum class ExecutorType
-{
-	System,
-};
-
 class Builder
 {
 public:
-	Builder();
-	Builder(const Builder&) = default;
-	Builder(Builder&&) noexcept = default;
-	Builder& operator=(const Builder&) = default;
-	Builder& operator=(Builder&&) noexcept = default;
-	~Builder() = default;
-
-	Builder& useDefaultArgumentHandling();
-	Builder& useDefaultArgumentHandling(int argc, char* argv[]);
-	Builder& detectCompiler();
-	Builder& setWarningLevel(WarningLevel level);
-	Builder& useBuildExecutor(ExecutorType type);
-
-	[[nodiscard]] std::pair<CommandError, CommandResult> build(std::string_view filename) const;
-
-private:
-	struct Impl;
-	std::shared_ptr<Impl> impl_;
-
-	[[nodiscard]] detail::ConfigurationState snapshot() const;
-};
-
-[[nodiscard]] Builder initBuilder();
-} // namespace nob
-
-namespace nob::detail
-{
-enum class CompilerKind : std::uint8_t
-{
-	GCC,
-	Clang,
-	MSVC,
-};
-
-enum class ScriptFlavor : std::uint8_t
-{
-	PosixShell,
-	WindowsBatch,
-};
-
-struct CompilerChoice
-{
-	CompilerKind kind{};
-	std::string executable{};
-	std::string version{};
-};
-
-struct ConfigurationState
-{
-	int argc{0};
-	char** argv{nullptr};
-	bool has_arguments{false};
-	bool use_default_argument_handling{false};
-	nob::WarningLevel warning_level{nob::WarningLevel::Default};
-	std::optional<CompilerChoice> compiler{};
-	nob::ExecutorType executor{nob::ExecutorType::System};
-};
-
-[[nodiscard]] inline std::string quotePosix(std::string_view value)
-{
-	std::string quoted{"'"};
-	for (char ch : value)
+	Builder(int argc, char* argv[])
 	{
-		if (ch == '\'')
+		if (std::system("cmd /c ver > nul 2>&1") == 0)
 		{
-			quoted.append("'\\''");
+			platform = Platform::Windows;
+		}
+		else if (std::system("uname > /dev/null 2>&1") == 0)
+		{
+			platform = Platform::Linux;
 		}
 		else
 		{
-			quoted.push_back(ch);
+			error = RuntimeError::UnrecognizedHostOS;
 		}
 	}
-	quoted.push_back('\'');
-	return quoted;
-}
 
-[[nodiscard]] inline std::string quoteWindows(std::string_view value)
-{
-	std::string quoted{"\""};
-	for (char ch : value)
+	Builder& useDefaultArgumentHandling()
 	{
-		if (ch == '"')
+		if (error.has_value())
 		{
-			quoted.push_back('\\');
+			return *this;
 		}
-		quoted.push_back(ch);
+		// TODO: implement some default flags, i.e. -h, -release, -w
+		return *this;
 	}
-	quoted.push_back('"');
-	return quoted;
-}
 
-class ScriptBuilder
-{
-public:
-	explicit ScriptBuilder(ConfigurationState state);
-	virtual ~ScriptBuilder() = default;
+	Builder& detectCompiler()
+	{
+		if (error.has_value())
+		{
+			return *this;
+		}
 
-	[[nodiscard]] virtual std::string buildScript(std::string_view source) const = 0;
-	[[nodiscard]] virtual ScriptFlavor flavor() const noexcept = 0;
+		return *this;
+	}
 
-protected:
-	[[nodiscard]] ConfigurationState& state() noexcept;
-	[[nodiscard]] const ConfigurationState& state() const noexcept;
-	[[nodiscard]] std::vector<std::string> warningFlags() const;
+	Builder& useCompiler(Compiler c)
+	{
+		if (error.has_value())
+		{
+			return *this;
+		}
+
+		compiler = c;
+
+		return *this;
+	}
+
+	Builder& useExecutionStrategy(ExecutionStrategy s)
+	{
+		if (error.has_value())
+		{
+			return *this;
+		}
+
+		strategy = s;
+
+		return *this;
+	}
+
+	Builder& useWarningLevel(WarningLevel l)
+	{
+		if (error.has_value())
+		{
+			return *this;
+		}
+
+		warning_level = l;
+
+		return *this;
+	}
+
+	std::tuple<std::optional<RuntimeError>, BuildResult>
+	build(std::string entry_point)
+	{
+		BuildResult result{};
+		if (error.has_value())
+		{
+			return std::make_tuple(error, result);
+		}
+
+		return std::make_tuple(error, result);
+	}
 
 private:
-	ConfigurationState state_;
+	Platform platform;
+	Compiler compiler;
+	ExecutionStrategy strategy;
+	WarningLevel warning_level;
+	std::optional<RuntimeError> error;
+	std::vector<std::string> args;
 };
-
-class GCCBuilder final : public ScriptBuilder
-{
-public:
-	explicit GCCBuilder(ConfigurationState state);
-
-	[[nodiscard]] std::string buildScript(std::string_view source) const override;
-	[[nodiscard]] ScriptFlavor flavor() const noexcept override;
-};
-
-class ClangBuilder final : public ScriptBuilder
-{
-public:
-	explicit ClangBuilder(ConfigurationState state);
-
-	[[nodiscard]] std::string buildScript(std::string_view source) const override;
-	[[nodiscard]] ScriptFlavor flavor() const noexcept override;
-};
-
-class MSVCBuilder final : public ScriptBuilder
-{
-public:
-	explicit MSVCBuilder(ConfigurationState state);
-
-	[[nodiscard]] std::string buildScript(std::string_view source) const override;
-	[[nodiscard]] ScriptFlavor flavor() const noexcept override;
-};
-
-class BuildExecutor
-{
-public:
-	explicit BuildExecutor(std::unique_ptr<ScriptBuilder> script_builder);
-	virtual ~BuildExecutor() = default;
-
-	[[nodiscard]] virtual std::pair<nob::CommandError, nob::CommandResult> build(std::string_view source) const = 0;
-
-protected:
-	[[nodiscard]] ScriptBuilder& scriptBuilder() const noexcept;
-	[[nodiscard]] ScriptBuilder* scriptBuilderPtr() const noexcept;
-
-	[[nodiscard]] static std::string randomToken();
-	[[nodiscard]] static std::filesystem::path writeScript(std::string_view contents, ScriptFlavor flavor, nob::CommandError& error);
-	[[nodiscard]] static std::pair<int, std::string> executeScript(const std::filesystem::path& script_path, ScriptFlavor flavor, nob::CommandError& error);
-	static void cleanup(const std::filesystem::path& script_path) noexcept;
-
-private:
-	std::unique_ptr<ScriptBuilder> builder_;
-};
-
-class SystemExecutor final : public BuildExecutor
-{
-public:
-	explicit SystemExecutor(std::unique_ptr<ScriptBuilder> script_builder);
-
-	[[nodiscard]] std::pair<nob::CommandError, nob::CommandResult> build(std::string_view source) const override;
-};
-
-[[nodiscard]] std::optional<CompilerChoice> detectPreferredCompiler();
-} // namespace nob::detail
-
-namespace nob
-{
-struct Builder::Impl
-{
-	detail::ConfigurationState state{};
-};
-
-Builder::Builder()
-    : impl_{std::make_shared<Impl>()}
-{
-}
-
-Builder& Builder::useDefaultArgumentHandling()
-{
-	impl_->state.use_default_argument_handling = true;
-	return *this;
-}
-
-Builder& Builder::useDefaultArgumentHandling(int argc, char* argv[])
-{
-	impl_->state.argc = argc;
-	impl_->state.argv = argv;
-	impl_->state.has_arguments = true;
-	impl_->state.use_default_argument_handling = true;
-	return *this;
-}
-
-Builder& Builder::detectCompiler()
-{
-	if (auto compiler = detail::detectPreferredCompiler())
-	{
-		impl_->state.compiler = std::move(*compiler);
-	}
-	return *this;
-}
-
-Builder& Builder::setWarningLevel(WarningLevel level)
-{
-	impl_->state.warning_level = level;
-	return *this;
-}
-
-Builder& Builder::useBuildExecutor(ExecutorType type)
-{
-	impl_->state.executor = type;
-	return *this;
-}
-
-std::pair<CommandError, CommandResult> Builder::build(std::string_view filename) const
-{
-	CommandError error{};
-	CommandResult result{};
-
-	if (!impl_->state.compiler)
-	{
-		error = CommandError{true, "no compiler detected", "call detectCompiler() before build()"};
-		return {error, result};
-	}
-
-	std::unique_ptr<detail::ScriptBuilder> builder{};
-
-	switch (impl_->state.compiler->kind)
-	{
-	case detail::CompilerKind::GCC:
-		builder = std::make_unique<detail::GCCBuilder>(snapshot());
-		break;
-	case detail::CompilerKind::Clang:
-		builder = std::make_unique<detail::ClangBuilder>(snapshot());
-		break;
-	case detail::CompilerKind::MSVC:
-		builder = std::make_unique<detail::MSVCBuilder>(snapshot());
-		break;
-	}
-
-	std::unique_ptr<detail::BuildExecutor> executor{};
-
-	switch (impl_->state.executor)
-	{
-	case ExecutorType::System:
-		executor = std::make_unique<detail::SystemExecutor>(std::move(builder));
-		break;
-	}
-
-	if (!executor)
-	{
-		error = CommandError{true, "no executor available", "configure a build executor before calling build()"};
-		return {error, result};
-	}
-
-	return executor->build(filename);
-}
-
-detail::ConfigurationState Builder::snapshot() const
-{
-	return impl_->state;
-}
-
-Builder initBuilder()
-{
-	Builder builder{};
-	builder.useBuildExecutor(ExecutorType::System);
-	return builder;
-}
 } // namespace nob
-
-namespace nob::detail
-{
-namespace
-{
-[[nodiscard]] bool commandExists(std::string_view command)
-{
-#if defined(_WIN32)
-	std::string query{"where "};
-	query.append(command);
-	query.append(" >nul 2>nul");
-#else
-	std::string query{"command -v "};
-	query.append(command);
-	query.append(" >/dev/null 2>&1");
-#endif
-	return std::system(query.c_str()) == 0;
-}
-
-[[nodiscard]] std::optional<std::string> capture(std::string command)
-{
-#if defined(_WIN32)
-	std::unique_ptr<FILE, decltype(&_pclose)> pipe(_popen(command.c_str(), "r"), &_pclose);
-#else
-	std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(command.c_str(), "r"), pclose);
-#endif
-	if (!pipe)
-	{
-		return std::nullopt;
-	}
-
-	std::string output{};
-	std::array<char, 256> buffer{};
-
-	while (std::fgets(buffer.data(), static_cast<int>(buffer.size()), pipe.get()) != nullptr)
-	{
-		output.append(buffer.data());
-	}
-
-	return output;
-}
-
-[[nodiscard]] std::optional<int> parseMajorVersion(std::string_view text)
-{
-	std::string digits{};
-	bool collecting{false};
-
-	for (char ch : text)
-	{
-		if (std::isdigit(static_cast<unsigned char>(ch)))
-		{
-			digits.push_back(ch);
-			collecting = true;
-		}
-		else if (collecting)
-		{
-			break;
-		}
-	}
-
-	if (digits.empty())
-	{
-		return std::nullopt;
-	}
-
-	try
-	{
-		return std::stoi(digits);
-	}
-	catch (...)
-	{
-		return std::nullopt;
-	}
-}
-
-[[nodiscard]] std::optional<CompilerChoice> detectGCC()
-{
-	constexpr int minimum_major{14};
-	std::optional<CompilerChoice> best{};
-
-	auto consider = [&](const std::string& candidate) {
-		if (!commandExists(candidate))
-		{
-			return;
-		}
-
-		auto output = capture(candidate + " -dumpfullversion 2>&1");
-		if (!output)
-		{
-			output = capture(candidate + " -dumpversion 2>&1");
-		}
-
-		if (!output)
-		{
-			return;
-		}
-
-		std::string version{*output};
-		if (auto newline = version.find('\n'); newline != std::string::npos)
-		{
-			version.erase(newline);
-		}
-
-		auto major = parseMajorVersion(version);
-		if (!major || *major < minimum_major)
-		{
-			return;
-		}
-
-		auto best_major = best ? parseMajorVersion(best->version) : std::optional<int>{};
-		if (!best || !best_major || *major > *best_major)
-		{
-			best = CompilerChoice{CompilerKind::GCC, candidate, std::move(version)};
-		}
-	};
-
-	for (int major = 20; major >= minimum_major; --major)
-	{
-		consider("g++-" + std::to_string(major));
-	}
-
-	consider("g++");
-	return best;
-}
-
-[[nodiscard]] std::optional<CompilerChoice> detectClang()
-{
-	constexpr int minimum_major{20};
-	std::optional<CompilerChoice> best{};
-
-	auto consider = [&](const std::string& candidate) {
-		if (!commandExists(candidate))
-		{
-			return;
-		}
-
-		auto output = capture(candidate + " --version 2>&1");
-		if (!output)
-		{
-			return;
-		}
-
-		std::string version{*output};
-		if (auto newline = version.find('\n'); newline != std::string::npos)
-		{
-			version.erase(newline);
-		}
-
-		auto major = parseMajorVersion(version);
-		if (!major || *major < minimum_major)
-		{
-			return;
-		}
-
-		auto best_major = best ? parseMajorVersion(best->version) : std::optional<int>{};
-		if (!best || !best_major || *major > *best_major)
-		{
-			best = CompilerChoice{CompilerKind::Clang, candidate, std::move(version)};
-		}
-	};
-
-	for (int major = 24; major >= minimum_major; --major)
-	{
-		consider("clang++-" + std::to_string(major));
-	}
-
-	consider("clang++");
-	return best;
-}
-
-[[nodiscard]] std::optional<CompilerChoice> detectMSVC()
-{
-#if defined(_WIN32)
-	if (!commandExists("cl"))
-	{
-		return std::nullopt;
-	}
-
-	auto output = capture("cl 2>&1");
-	if (!output)
-	{
-		return std::nullopt;
-	}
-
-	std::string version{*output};
-	if (auto newline = version.find('\n'); newline != std::string::npos)
-	{
-		version.erase(newline);
-	}
-
-	int major_value{0};
-	int minor_value{0};
-	int current{0};
-	int segments{0};
-	bool any_digit{false};
-
-	for (char ch : version)
-	{
-		if (std::isdigit(static_cast<unsigned char>(ch)))
-		{
-			current = current * 10 + (ch - '0');
-			any_digit = true;
-		}
-		else if (ch == '.')
-		{
-			if (segments == 0)
-			{
-				major_value = current;
-			}
-			else if (segments == 1)
-			{
-				minor_value = current;
-			}
-			++segments;
-			current = 0;
-			any_digit = false;
-		}
-		else if (any_digit)
-		{
-			if (segments == 0)
-			{
-				major_value = current;
-			}
-			else if (segments == 1)
-			{
-				minor_value = current;
-			}
-			break;
-		}
-	}
-
-	if (segments == 0 && any_digit)
-	{
-		major_value = current;
-	}
-	else if (segments == 1 && any_digit)
-	{
-		minor_value = current;
-	}
-
-	if (major_value < 19 || (major_value == 19 && minor_value < 35))
-	{
-		return std::nullopt;
-	}
-
-	return CompilerChoice{CompilerKind::MSVC, "cl", std::move(version)};
-#else
-	return std::nullopt;
-#endif
-}
-} // namespace
-
-ScriptBuilder::ScriptBuilder(ConfigurationState state)
-    : state_{std::move(state)}
-{
-}
-
-ConfigurationState& ScriptBuilder::state() noexcept
-{
-	return state_;
-}
-
-const ConfigurationState& ScriptBuilder::state() const noexcept
-{
-	return state_;
-}
-
-std::vector<std::string> ScriptBuilder::warningFlags() const
-{
-	switch (state_.warning_level)
-	{
-	case nob::WarningLevel::None:
-		return {};
-	case nob::WarningLevel::Default:
-		return {"-Wall"};
-	case nob::WarningLevel::Strict:
-		return {"-Wall", "-Wextra"};
-	case nob::WarningLevel::Maximal:
-		return {"-Wall", "-Wextra", "-Wpedantic"};
-	}
-
-	return {};
-}
-
-GCCBuilder::GCCBuilder(ConfigurationState state)
-    : ScriptBuilder(std::move(state))
-{
-}
-
-std::string GCCBuilder::buildScript(std::string_view source) const
-{
-	std::filesystem::path source_path{source};
-	std::filesystem::path output_path{source_path};
-	output_path.replace_extension("");
-	if (output_path.empty())
-	{
-		output_path = "a.out";
-	}
-
-	std::ostringstream script{};
-	script << "#!/usr/bin/env bash\n";
-	script << "set -euo pipefail\n\n";
-	script << quotePosix(state().compiler->executable) << " ";
-	script << "-std=c++23 ";
-
-	for (const auto& flag : warningFlags())
-	{
-		script << flag << " ";
-	}
-
-	script << quotePosix(source_path.string()) << " ";
-	script << "-o " << quotePosix(output_path.string()) << "\n";
-	return script.str();
-}
-
-ScriptFlavor GCCBuilder::flavor() const noexcept
-{
-	return ScriptFlavor::PosixShell;
-}
-
-ClangBuilder::ClangBuilder(ConfigurationState state)
-    : ScriptBuilder(std::move(state))
-{
-}
-
-std::string ClangBuilder::buildScript(std::string_view source) const
-{
-	std::filesystem::path source_path{source};
-	std::filesystem::path output_path{source_path};
-	output_path.replace_extension("");
-	if (output_path.empty())
-	{
-		output_path = "a.out";
-	}
-
-	std::ostringstream script{};
-	script << "#!/usr/bin/env bash\n";
-	script << "set -euo pipefail\n\n";
-	script << quotePosix(state().compiler->executable) << " ";
-	script << "-std=c++23 ";
-
-	for (const auto& flag : warningFlags())
-	{
-		script << flag << " ";
-	}
-
-	script << quotePosix(source_path.string()) << " ";
-	script << "-o " << quotePosix(output_path.string()) << "\n";
-	return script.str();
-}
-
-ScriptFlavor ClangBuilder::flavor() const noexcept
-{
-	return ScriptFlavor::PosixShell;
-}
-
-MSVCBuilder::MSVCBuilder(ConfigurationState state)
-    : ScriptBuilder(std::move(state))
-{
-}
-
-std::string MSVCBuilder::buildScript(std::string_view source) const
-{
-	std::filesystem::path source_path{source};
-	std::filesystem::path output_path{source_path};
-	output_path.replace_extension(".exe");
-	if (output_path.empty())
-	{
-		output_path = "a.exe";
-	}
-
-	std::ostringstream script{};
-	script << "@echo off\n";
-	script << "setlocal enableextensions\n";
-	script << "cl /std:c++20 /EHsc ";
-
-	for (const auto& flag : warningFlags())
-	{
-		script << flag << " ";
-	}
-
-	script << quoteWindows(source_path.string()) << " ";
-	script << "/Fe:" << quoteWindows(output_path.string()) << "\n";
-	return script.str();
-}
-
-ScriptFlavor MSVCBuilder::flavor() const noexcept
-{
-	return ScriptFlavor::WindowsBatch;
-}
-
-BuildExecutor::BuildExecutor(std::unique_ptr<ScriptBuilder> script_builder)
-    : builder_{std::move(script_builder)}
-{
-}
-
-ScriptBuilder& BuildExecutor::scriptBuilder() const noexcept
-{
-	return *builder_;
-}
-
-ScriptBuilder* BuildExecutor::scriptBuilderPtr() const noexcept
-{
-	return builder_.get();
-}
-
-std::string BuildExecutor::randomToken()
-{
-	std::array<unsigned char, 16> bytes{};
-	std::random_device device{};
-	for (auto& byte : bytes)
-	{
-		byte = static_cast<unsigned char>(device());
-	}
-
-	std::string token{};
-	token.reserve(bytes.size() * 2);
-	for (unsigned char byte : bytes)
-	{
-		constexpr char alphabet[]{"0123456789abcdef"};
-		token.push_back(alphabet[(byte >> 4) & 0xF]);
-		token.push_back(alphabet[byte & 0xF]);
-	}
-
-	return token;
-}
-
-std::filesystem::path BuildExecutor::writeScript(std::string_view contents, ScriptFlavor flavor, nob::CommandError& error)
-{
-	std::error_code ec{};
-	auto temp_dir = std::filesystem::temp_directory_path(ec);
-	if (ec)
-	{
-		error = nob::CommandError{true, "failed to resolve temporary directory", ec.message()};
-		return {};
-	}
-
-	auto suffix = flavor == ScriptFlavor::PosixShell ? ".sh" : ".bat";
-	auto script_path = temp_dir / ("nob-" + randomToken() + suffix);
-
-	std::ofstream file{script_path, std::ios::binary};
-	if (!file)
-	{
-		error = nob::CommandError{true, "failed to create temporary script", script_path.string()};
-		return {};
-	}
-
-	file << contents;
-	file.close();
-
-	if (!file)
-	{
-		error = nob::CommandError{true, "failed to write temporary script", script_path.string()};
-		return {};
-	}
-
-	if (flavor == ScriptFlavor::PosixShell)
-	{
-		std::filesystem::permissions(
-		    script_path,
-		    std::filesystem::perms::owner_read | std::filesystem::perms::owner_write | std::filesystem::perms::owner_exec |
-		        std::filesystem::perms::group_read | std::filesystem::perms::group_exec |
-		        std::filesystem::perms::others_read | std::filesystem::perms::others_exec,
-		    ec);
-
-		if (ec)
-		{
-			error = nob::CommandError{true, "failed to mark script executable", ec.message()};
-			return {};
-		}
-	}
-
-	return script_path;
-}
-
-std::pair<int, std::string> BuildExecutor::executeScript(const std::filesystem::path& script_path, ScriptFlavor flavor, nob::CommandError& error)
-{
-	std::string command{};
-
-	if (flavor == ScriptFlavor::PosixShell)
-	{
-		command = "bash ";
-		command.append(quotePosix(script_path.string()));
-		command.append(" 2>&1");
-	}
-	else
-	{
-#if defined(_WIN32)
-		command = "cmd /C ";
-		command.append(quoteWindows(script_path.string()));
-		command.append(" 2>&1");
-#else
-		error = nob::CommandError{true, "windows batch execution unavailable", script_path.string()};
-		return {EXIT_FAILURE, {}};
-#endif
-	}
-
-#if defined(_WIN32)
-	std::unique_ptr<FILE, decltype(&_pclose)> pipe(_popen(command.c_str(), "r"), &_pclose);
-#else
-	std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(command.c_str(), "r"), pclose);
-#endif
-
-	if (!pipe)
-	{
-		error = nob::CommandError{true, "failed to spawn process", command};
-		return {EXIT_FAILURE, {}};
-	}
-
-	std::string output{};
-	std::array<char, 256> buffer{};
-
-	while (std::fgets(buffer.data(), static_cast<int>(buffer.size()), pipe.get()) != nullptr)
-	{
-		output.append(buffer.data());
-	}
-
-#if defined(_WIN32)
-	int status = _pclose(pipe.release());
-#else
-	int status = pclose(pipe.release());
-#endif
-
-	int exit_code = 0;
-
-#if defined(_WIN32)
-	exit_code = status;
-#else
-	if (WIFEXITED(status))
-	{
-		exit_code = WEXITSTATUS(status);
-	}
-	else
-	{
-		exit_code = status;
-	}
-#endif
-
-	return {exit_code, output};
-}
-
-void BuildExecutor::cleanup(const std::filesystem::path& script_path) noexcept
-{
-	std::error_code ec{};
-	std::filesystem::remove(script_path, ec);
-}
-
-SystemExecutor::SystemExecutor(std::unique_ptr<ScriptBuilder> script_builder)
-    : BuildExecutor(std::move(script_builder))
-{
-}
-
-std::pair<nob::CommandError, nob::CommandResult> SystemExecutor::build(std::string_view source) const
-{
-	nob::CommandError error{};
-	nob::CommandResult result{};
-
-	if (!scriptBuilderPtr())
-	{
-		error = nob::CommandError{true, "no script builder configured", {}};
-		return {error, result};
-	}
-
-	auto& builder = scriptBuilder();
-	auto script = builder.buildScript(source);
-	auto flavor = builder.flavor();
-
-	auto script_path = writeScript(script, flavor, error);
-	if (error)
-	{
-		return {error, result};
-	}
-
-	auto [exit_code, output] = executeScript(script_path, flavor, error);
-	cleanup(script_path);
-
-	if (error)
-	{
-		return {error, result};
-	}
-
-	result.exit_code = exit_code;
-	result.output = std::move(output);
-	result.script = std::move(script);
-
-	if (exit_code != 0)
-	{
-		error = nob::CommandError{true, "build command failed", "exit code " + std::to_string(exit_code)};
-	}
-
-	return {error, result};
-}
-
-std::optional<CompilerChoice> detectPreferredCompiler()
-{
-	if (auto gcc = detectGCC())
-	{
-		return gcc;
-	}
-
-	if (auto clang = detectClang())
-	{
-		return clang;
-	}
-
-	if (auto msvc = detectMSVC())
-	{
-		return msvc;
-	}
-
-	return std::nullopt;
-}
-} // namespace nob::detail
