@@ -4,26 +4,20 @@ import std;
 
 export namespace nob
 {
-enum Platform
+enum class Platform
 {
 	Linux,
 	Windows,
 };
 
-enum Compiler
+enum class Compiler
 {
 	GCC,
 	Clang,
 	MSVC,
 };
 
-enum ExecutionStrategy
-{
-	System,
-	Ninja, // TODO
-};
-
-enum WarningLevel
+enum class WarningLevel
 {
 	None,
 	Default,
@@ -31,7 +25,13 @@ enum WarningLevel
 	Maximal,
 };
 
-enum OptimizationLevel
+enum class Standard
+{
+	Cpp23,
+	Cpp26,
+};
+
+enum class OptimizationLevel
 {
 	None,
 	CompilerDefault,
@@ -41,7 +41,7 @@ enum OptimizationLevel
 	Aggressive,
 };
 
-enum RuntimeError
+enum class RuntimeError
 {
 	UnrecognizedHostOS,
 	NoCompilerFound,
@@ -72,157 +72,422 @@ struct BuildResult
 
 namespace nob::detail
 {
-class BuildCommandGenerator
+class BuildTarget
 {
-public:
-	// This is the common interface for all strategies
-	virtual std::vector<std::string>
-	generateCommands(const std::string& entry_point,
-									 const std::string& output_dir, Compiler compiler,
-									 Platform os, WarningLevel warning_level,
-									 OptimizationLevel optimization_level) const = 0;
+protected:
+	std::string getWarningFlags() const
+	{
+		switch (compiler)
+		{
+		case Compiler::MSVC:
+		{
+			switch (warning_level)
+			{
+			case WarningLevel::None:
+			{
+				return "/W";
+			}
+			case WarningLevel::Default:
+			{
+				return "";
+			}
+			case WarningLevel::Strict:
+			{
+				return "/W3";
+			}
+			case WarningLevel::Maximal:
+			{
+				return "/W4";
+			}
+			default:
+			{
+				return "";
+			}
+			}
+		}
+		case Compiler::GCC:
+		{
+			switch (warning_level)
+			{
+			case WarningLevel::None:
+			{
+				return "-w";
+			}
+			case WarningLevel::Default:
+			{
+				return "";
+			}
+			case WarningLevel::Strict:
+			{
+				return "-Wall -Wextra -Wpedantic";
+			}
+			case WarningLevel::Maximal:
+			{
+				return "-pedantic -Wall -Wextra -Wcast-align -Wcast-qual "
+							 "-Wctor-dtor-privacy -Wdisabled-optimization -Wformat=2 "
+							 "-Winit-self -Wlogical-op -Wmissing-declarations "
+							 "-Wmissing-include-dirs -Wnoexcept -Wold-style-cast "
+							 "-Woverloaded-virtual -Wredundant-decls -Wshadow "
+							 "-Wsign-conversion "
+							 "-Wsign-promo -Wstrict-null-sentinel -Wstrict-overflow=5 "
+							 "-Wswitch-default -Wundef -Wno-unused";
+			}
+			default:
+			{
+				return "";
+			}
+			}
+		}
+		case Compiler::Clang:
+		{
+			switch (warning_level)
+			{
+			case WarningLevel::None:
+			{
+				return "-w";
+			}
+			case WarningLevel::Default:
+			{
+				return "";
+			}
+			case WarningLevel::Strict:
+			{
+				return "-Wall -Wextra -Wpedantic";
+			}
+			case WarningLevel::Maximal:
+			{
+				return "-Weverything -Wno-c++98-compat -Wno-padded";
+			}
+			default:
+			{
+				return "";
+			}
+			}
+		}
+		default:
+		{
+			return "";
+		}
+		}
+	}
 
-	virtual ~BuildCommandGenerator() = default;
+	std::string getOptimizationFlags() const
+	{
+		switch (compiler)
+		{
+		case Compiler::MSVC:
+		{
+			switch (optimization_level)
+			{
+			case OptimizationLevel::None:
+			{
+				return "/Od";
+			}
+			case OptimizationLevel::DebugFriendly:
+			{
+				return "/Od";
+			}
+			case OptimizationLevel::Size:
+			{
+				return "/O1";
+			}
+			case OptimizationLevel::Speed:
+			{
+				return "/O2";
+			}
+			case OptimizationLevel::Aggressive:
+			{
+				return "/O2";
+			}
+			default:
+			{
+				return "";
+			}
+			}
+		}
+		case Compiler::GCC:
+		case Compiler::Clang:
+		{
+			switch (optimization_level)
+			{
+			case OptimizationLevel::None:
+			{
+				return "-O0";
+			}
+			case OptimizationLevel::DebugFriendly:
+			{
+				return "-Og";
+			}
+			case OptimizationLevel::Size:
+			{
+				return "-Os";
+			}
+			case OptimizationLevel::Speed:
+			{
+				return "-O2";
+			}
+			case OptimizationLevel::Aggressive:
+			{
+				return "-O3";
+			}
+			default:
+			{
+				return "";
+			}
+			}
+		}
+		default:
+		{
+			return "";
+		}
+		}
+	}
+
+	std::string getStandardFlag() const
+	{
+		switch (compiler)
+		{
+		case Compiler::MSVC:
+		{
+			switch (standard)
+			{
+			case Standard::Cpp23:
+			{
+				return "/std:c++23preview";
+			}
+			case Standard::Cpp26:
+			{
+				return "/std:c++latest";
+			}
+			default:
+			{
+				return "";
+			}
+			}
+		}
+		case Compiler::GCC:
+		case Compiler::Clang:
+		{
+			switch (standard)
+			{
+			case Standard::Cpp23:
+			{
+				return "-std=c++23";
+			}
+			case Standard::Cpp26:
+			{
+				return "-std=c++26";
+			}
+			default:
+			{
+				return "";
+			}
+			}
+		}
+		default:
+		{
+			return "";
+		}
+		}
+	}
+
+public:
+	// Configuration is now stored in the object
+	Compiler compiler;
+	Platform os;
+	WarningLevel warning_level;
+	OptimizationLevel optimization_level;
+	Standard standard;
+
+	BuildTarget(Compiler comp, Platform p, WarningLevel wl, OptimizationLevel ol,
+							Standard s)
+			: compiler(comp), os(p), warning_level(wl), optimization_level(ol),
+				standard(s)
+	{
+	}
+
+	virtual ~BuildTarget() = default;
+
+	virtual std::string getSourcePath() const = 0;
+
+	virtual std::string getObjectFileExtension() const
+	{
+		if (compiler == Compiler::MSVC)
+		{
+			return ".obj";
+		}
+		return ".o";
+	}
+
+	virtual std::string
+	getObjectFilePath(const std::string& output_dir) const = 0;
+
+	virtual std::string
+	getModuleInterfacePath(const std::string& output_dir) const
+	{
+		return "";
+	}
+
+	virtual std::string getModuleName() const { return ""; }
+
+	virtual std::vector<std::string>
+	generateCommands(const std::string& output_dir,
+									 const std::vector<BuildTarget*>& dependencies) const = 0;
 };
 
-class SystemCommandGenerator : public BuildCommandGenerator
+// TODO: Module target!
+
+class ExecutableTarget : public BuildTarget
+{
+public:
+	std::string source_path;
+
+	ExecutableTarget(std::string path, Compiler comp, Platform p, WarningLevel wl,
+									 OptimizationLevel ol, Standard s)
+			: BuildTarget(comp, p, wl, ol, s), source_path(std::move(path))
+	{
+	}
+
+	std::string getSourcePath() const override { return source_path; }
+
+	std::string getObjectFilePath(const std::string& output_dir) const override
+	{
+		return (std::filesystem::path(output_dir) /
+						std::filesystem::path(source_path).filename())
+				.replace_extension(getObjectFileExtension())
+				.string();
+	}
+
+	std::vector<std::string>
+	generateCommands(const std::string& output_dir,
+									 const std::vector<BuildTarget*>& dependencies) const override
+	{
+		std::vector<std::string> commands;
+		const std::string own_object_file = getObjectFilePath(output_dir);
+		std::string executable_extension = (os == Platform::Windows) ? ".exe" : "";
+
+		if (compiler == Compiler::MSVC)
+		{
+			std::string compile_command = "cl.exe " + getStandardFlag() +
+																		" /EHsc /nologo " + getWarningFlags() +
+																		" " + getOptimizationFlags() + " /c ";
+			compile_command += "/Fo:\"" + own_object_file + "\" ";
+			compile_command += "\"" + getSourcePath() + "\" ";
+
+			for (const auto* dep : dependencies)
+			{
+				std::string ifc_path = dep->getModuleInterfacePath(output_dir);
+				if (!ifc_path.empty())
+				{
+					compile_command +=
+							"/reference " + dep->getModuleName() + "=\"" + ifc_path + "\" ";
+				}
+			}
+			commands.push_back(compile_command);
+		}
+		else if (compiler == Compiler::GCC)
+		{
+			std::string compile_command =
+					"g++" + executable_extension + " " + getStandardFlag() + " " +
+					getWarningFlags() + " " + getOptimizationFlags() + " -fmodules -c ";
+			compile_command += "-o \"" + own_object_file + "\" ";
+			compile_command += "\"" + getSourcePath() + "\" ";
+
+			// For GCC, we just need to tell it where to find the compiled module
+			// files It automatically maps module names to file paths in that
+			// directory.
+			compile_command +=
+					"-fmodule-path=" + std::filesystem::path(output_dir).string() +
+					"/gcm.cache/ ";
+
+			commands.push_back(compile_command);
+		}
+		else if (compiler == Compiler::Clang)
+		{
+			std::string compile_command = "clang++" + executable_extension +
+																		" -stdlib=libc++ " + getStandardFlag() +
+																		" " + getWarningFlags() + " " +
+																		getOptimizationFlags() + " -c ";
+			compile_command += "-o \"" + own_object_file + "\" ";
+			compile_command += "\"" + getSourcePath() + "\" ";
+
+			for (const auto* dep : dependencies)
+			{
+				// ex. -fmodule-file=foo="out/foo.pcm" "src/foo.mxx"
+				compile_command += "-fmodule-file=" + dep->getModuleName() + "=\"" +
+													 dep->getModuleInterfacePath(output_dir) + "\" \"" +
+													 dep->getSourcePath() + "\" ";
+			}
+
+			commands.push_back(compile_command);
+		}
+
+		// --- Part 2: LINK all object files into the final executable ---
+		std::filesystem::path out_file =
+				std::filesystem::path(getSourcePath()).filename();
+		std::filesystem::path output_executable = output_dir / out_file;
+		output_executable.replace_extension(executable_extension);
+
+		if (compiler == Compiler::MSVC)
+		{
+			std::string link_command = "link.exe /nologo ";
+			link_command += "/OUT:\"" + output_executable.string() + "\" ";
+			link_command += "\"" + own_object_file + "\" "; // Add own object file
+
+			for (const auto* dep : dependencies)
+			{
+				link_command += "\"" + dep->getObjectFilePath(output_dir) + "\" ";
+			}
+			commands.push_back(link_command);
+		}
+		else if (compiler == Compiler::GCC)
+		{
+			// With GCC, it's often easiest to use the g++ driver for linking
+			std::string link_command =
+					"g++" + executable_extension + " " + getStandardFlag() + " ";
+			link_command += "-o \"" + output_executable.string() + "\" ";
+			link_command += "\"" + own_object_file + "\" "; // Add own object file
+
+			for (const auto* dep : dependencies)
+			{
+				link_command += "\"" + dep->getObjectFilePath(output_dir) + "\" ";
+			}
+			commands.push_back(link_command);
+		}
+		else if (compiler == Compiler::Clang)
+		{
+			std::string link_command = "clang++" + executable_extension +
+																 " -stdlib=libc++ " + getStandardFlag() + " ";
+			link_command += "-o \"" + output_executable.string() + "\" ";
+			link_command += "\"" + own_object_file + "\" ";
+
+			for (const auto* dep : dependencies)
+			{
+				link_command += "\"" + dep->getObjectFilePath(output_dir) + "\" ";
+			}
+			commands.push_back(link_command);
+		}
+
+		return commands;
+	}
+};
+
+class SystemCommandGenerator
 {
 public:
 	std::vector<std::string>
 	generateCommands(const std::string& entry_point,
 									 const std::string& output_dir, Compiler compiler,
 									 Platform os, WarningLevel warning_level,
-									 OptimizationLevel optimization_level) const override
+									 OptimizationLevel optimization_level) const
 	{
-		std::vector<std::string> commands;
-		std::string executable_extension = (os == Platform::Windows) ? ".exe" : "";
-		std::filesystem::path out_file =
-				std::filesystem::path(entry_point).filename();
-		std::filesystem::path output = output_dir / out_file;
-		output.replace_extension(executable_extension);
-
-		if (compiler == Compiler::MSVC)
-		{
-			std::string optimization_flag;
-			if (optimization_level == OptimizationLevel::None)
-			{
-				optimization_flag = "/Od";
-			}
-			else if (optimization_level == OptimizationLevel::DebugFriendly)
-			{
-				optimization_flag = "/Od";
-			}
-			else if (optimization_level == OptimizationLevel::Size)
-			{
-				optimization_flag = "/O1";
-			}
-			else if (optimization_level == OptimizationLevel::Speed)
-			{
-				optimization_flag = "/O2";
-			}
-			else if (optimization_level == OptimizationLevel::Aggressive)
-			{
-				optimization_flag = "/O2";
-			}
-			else
-			{
-				optimization_flag = "";
-			}
-
-			std::string warning_flags;
-			if (warning_level == WarningLevel::None)
-			{
-				warning_flags = "/w";
-			}
-			else if (warning_level == WarningLevel::Strict)
-			{
-				warning_flags = "/W3";
-			}
-			else if (warning_level == WarningLevel::Maximal)
-			{
-				warning_flags = "/W4";
-			}
-			else
-			{
-				warning_flags = "";
-			}
-
-			std::string common_flags = "/std:c++latest /EHsc /nologo";
-
-			commands.push_back(std::format("cl.exe {} {} {} /c std.ixx" warning_flags,
-																		 common_flags, optimization_flag));
-
-			commands.push_back(std::format(
-					"cl.exe {} {} {} /Fe:\"{}\" \"{}\" std.obj", warning_flags,
-					common_flags, optimization_flag, output.string(), entry_point));
-		}
-		else if (compiler == Compiler::GCC)
-		{
-			std::string optimization_flag;
-			if (optimization_level == OptimizationLevel::None)
-			{
-				optimization_flag = "-O0";
-			}
-			else if (optimization_level == OptimizationLevel::DebugFriendly)
-			{
-				optimization_flag = "-Og";
-			}
-			else if (optimization_level == OptimizationLevel::Size)
-			{
-				optimization_flag = "-Os";
-			}
-			else if (optimization_level == OptimizationLevel::Speed)
-			{
-				optimization_flag = "-O2";
-			}
-			else if (optimization_level == OptimizationLevel::Aggressive)
-			{
-				optimization_flag = "-O3";
-			}
-			else
-			{
-				optimization_flag = "";
-			}
-
-			std::string warning_flags;
-			if (warning_level == WarningLevel::None)
-			{
-				warning_flags = "";
-			}
-			else if (warning_level == WarningLevel::Strict)
-			{
-				warning_flags = "-Wall -Wextra -pedantic";
-			}
-			else if (warning_level == WarningLevel::Maximal)
-			{
-				warning_flags =
-						"-pedantic -Wall -Wextra -Wcast-align -Wcast-qual "
-						"-Wctor-dtor-privacy -Wdisabled-optimization -Wformat=2 "
-						"-Winit-self -Wlogical-op -Wmissing-declarations "
-						"-Wmissing-include-dirs -Wnoexcept -Wold-style-cast "
-						"-Woverloaded-virtual -Wredundant-decls -Wshadow -Wsign-conversion "
-						"-Wsign-promo -Wstrict-null-sentinel -Wstrict-overflow=5 "
-						"-Wswitch-default -Wundef -Werror -Wno-unused";
-			}
-			else
-			{
-				warning_flags = "";
-			}
-
-			std::string common_flags = "-std=c++23 -fmodules";
-
-			commands.push_back(
-					std::format("g++{} {} {} {} -fsearch-include-path bits/std.cc "
-											"-fmodule-only -c bits/std.cc",
-											executable_extension, warning_flags, common_flags,
-											optimization_flag));
-
-			commands.push_back(std::format("g++{} {} {} {} "
-																		 "-o {} -x c++ {}",
-																		 executable_extension, warning_flags,
-																		 common_flags, optimization_flag,
-																		 output.string(), entry_point));
-		}
+		// Orchestrate the build:
+		// Use the compiler to scan dependencies
+		// Parse the resulting JSON P1689R5 (will require a JSON parser
+		// implementation in nob::detail) Construct the directed acyclic graph of
+		// build targets 		Emit error if cycle detected Spawn the build processes
+		// to construct the project Emit warnings and errors
+		return std::vector<std::string>();
 	}
 };
 } // namespace nob::detail
@@ -280,18 +545,6 @@ public:
 		return *this;
 	}
 
-	Builder& useExecutionStrategy(ExecutionStrategy s)
-	{
-		if (error.has_value())
-		{
-			return *this;
-		}
-
-		strategy = s;
-
-		return *this;
-	}
-
 	Builder& useWarningLevel(WarningLevel l)
 	{
 		if (error.has_value())
@@ -305,7 +558,7 @@ public:
 	}
 
 	std::tuple<std::optional<RuntimeError>, BuildResult>
-	build(std::string entry_point)
+	buildExe(std::string entry_point)
 	{
 		BuildResult result{};
 		if (error.has_value())
@@ -319,7 +572,6 @@ public:
 private:
 	Platform platform;
 	Compiler compiler;
-	ExecutionStrategy strategy;
 	WarningLevel warning_level;
 	std::optional<RuntimeError> error;
 	std::vector<std::string> args;

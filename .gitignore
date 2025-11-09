@@ -26,3 +26,6 @@ gcm.cache
 nob++*
 !nob++.mxx
 !nob++.cxx
+
+.vs
+.vscode
